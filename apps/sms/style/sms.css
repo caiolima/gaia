@@ -226,22 +226,22 @@ form[data-type="action"] img[src=""] {
   font-size: 1.8rem;
 }
 
-#new-message-notice-button {
-  float: right;
-  width: auto;
-}
-
 #new-message-notice-content {
   margin: 1rem 2rem;
   padding: 0;
+  
+  oveflow: hidden;
+
+  white-space: nowrap;
   line-height: 2rem;
   font-size: 1.8rem;
   text-align: left;
 }
 
 #new-message-notice-contact {
-  text-overflow: ellipsis;
   overflow: hidden;
+
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -250,7 +250,6 @@ form[data-type="action"] img[src=""] {
 }
 
 #new-message-notice-container-2 {
-  display: inline-block;
   vertical-align: super;
   float: right;
 }

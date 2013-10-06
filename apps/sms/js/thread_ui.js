@@ -165,11 +165,7 @@ var ThreadUI = global.ThreadUI = {
     );
 
     this.newMessageNotice.addEventListener(
-      'click', (function noticeClick(event) {
-        event.preventDefault();
-        this.hideNewMessageNotice();
-        this.forceScrollViewToBottom();
-      }).bind(this)
+      'click', this.onNewMessageNoticeClick.bind(this)
     );
 
     // Assimilations
@@ -448,6 +444,12 @@ var ThreadUI = global.ThreadUI = {
     }
   },
 
+  onNewMessageNoticeClick: function thui_onNewMessageNoticeClick(event) {
+    event.preventDefault();
+    this.hideNewMessageNotice();
+    this.forceScrollViewToBottom();
+  },
+
   // Message composer type changed:
   messageComposerTypeHandler: function thui_messageComposerTypeHandler() {
     this.updateCounter();
@@ -552,8 +554,8 @@ var ThreadUI = global.ThreadUI = {
 
     this.isScrolledManually = ((scrollTop + clientHeight) < scrollHeight);
 
-    //Check if the banner has been showed and close it when the scroll
-    //reach the bottom
+    // Check if the banner has been showed and close it when the scroll
+    // reach the bottom
     if (!this.isScrolledManually && this.isNewMessageNoticeShown) {
       this.hideNewMessageNotice();
     }
@@ -586,16 +588,20 @@ var ThreadUI = global.ThreadUI = {
     Contacts.findByPhoneNumber(message.sender, (function gotContact(contact) {
       var sender = message.sender;
       if (contact && contact.length) {
-        var details = Utils.getContactDetails(message.sender, contact[0]);
+        var details = Utils.getContactDetails(sender, contact[0]);
         sender = details.title || sender;
-        sender = sender.split(' ')[0];
+        // Get the first name
+        var index = sender.indexOf(' ');
+        if (index !== -1) {
+          sender = sender.slice(0, index);
+        }
       }
 
       var newMessageContactNode = document.getElementById(
         'new-message-notice-contact'
       );
 
-      newMessageContactNode.innerHTML = sender;
+      newMessageContactNode.textContent = sender;
 
       this.isNewMessageNoticeShown = true;
       this.newMessageNotice.classList.remove('hide');
