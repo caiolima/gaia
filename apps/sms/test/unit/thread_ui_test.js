@@ -2,7 +2,7 @@
          MockNavigatormozMobileMessage, Compose, MockDialog, Template, MockSMIL,
          Utils, MessageManager, LinkActionHandler, LinkHelper, Attachment,
          MockContact, MockOptionMenu, MockActivityPicker, Threads, Settings,
-         MockMessages, MockUtils, MockContacts, ActivityHandler */
+         MockMessages, MockUtils, MockContacts */
 
 'use strict';
 
@@ -42,7 +42,6 @@ requireApp('sms/test/unit/mock_smil.js');
 requireApp('sms/test/unit/mock_custom_dialog.js');
 requireApp('sms/test/unit/mock_url.js');
 requireApp('sms/test/unit/mock_compose.js');
-requireApp('sms/test/unit/mock_activity_handler.js');
 
 var mocksHelperForThreadUI = new MocksHelper([
   'Attachment',
@@ -58,8 +57,7 @@ var mocksHelperForThreadUI = new MocksHelper([
   'OptionMenu',
   'Dialog',
   'Contacts',
-  'SMIL',
-  'ActivityHandler'
+  'SMIL'
 ]);
 
 mocksHelperForThreadUI.init();
@@ -2137,7 +2135,6 @@ suite('thread_ui.js >', function() {
     var messageId = 23, link, phone = '123123123';
     setup(function() {
       this.sinon.spy(LinkActionHandler, 'onClick');
-      this.sinon.spy(LinkActionHandler, 'onContextMenu');
 
       this.sinon.stub(LinkHelper, 'searchAndLinkClickableData', function() {
         return '<a data-dial="' + phone +
@@ -2166,7 +2163,6 @@ suite('thread_ui.js >', function() {
       link.click();
       // This 'click' was handled properly?
       assert.ok(LinkActionHandler.onClick.called);
-      assert.isFalse(LinkActionHandler.onContextMenu.called);
     });
 
     test(' "contextmenu"', function() {
@@ -2180,21 +2176,71 @@ suite('thread_ui.js >', function() {
       // test were relocated to link_action_handler_test.js
       // This 'context-menu' was handled properly?
       assert.isFalse(LinkActionHandler.onClick.called);
-      assert.ok(LinkActionHandler.onContextMenu.called);
     });
 
-    test(' "contextmenu" after "click"', function() {
-      var contextMenuEvent = new CustomEvent('contextmenu', {
+  });
+
+  suite('Long press on the bubble >', function() {
+    var messageId = 23;
+    var link, messageDOM, contextMenuEvent;
+    setup(function() {
+      contextMenuEvent = new CustomEvent('contextmenu', {
         'bubbles': true,
         'cancelable': true
       });
-      // Clicking on the element
-      link.click();
-      // After clicking, we dispatch a context menu
+
+      this.sinon.spy(LinkActionHandler, 'onClick');
+      this.sinon.spy(ThreadUI, 'promptContact');
+      MockOptionMenu.mSetup();
+
+
+      this.sinon.stub(LinkHelper, 'searchAndLinkClickableData', function() {
+        return '<a data-dial="123123123" data-action="dial-link">123123123</a>';
+      });
+
+      ThreadUI.appendMessage({
+        id: messageId,
+        type: 'sms',
+        body: 'This is a test with 123123123',
+        delivery: 'error',
+        timestamp: new Date()
+      });
+      // Retrieve DOM element for executing the event
+      messageDOM = document.getElementById('message-' + messageId);
+      link = messageDOM.querySelector('a');
+    });
+
+    teardown(function() {
+      ThreadUI.container.innerHTML = '';
+      link = null;
+      MockOptionMenu.mTeardown();
+    });
+    test(' "click" on bubble (not in link-action) has no effect', function() {
+      messageDOM.click();
+      assert.ok(LinkActionHandler.onClick.calledOnce);
+      // As there is no action, we are not going to show any menu
+      assert.isFalse(ThreadUI.promptContact.calledOnce);
+    });
+    test(' "long-press" on link-action is not redirected to "onClick"',
+      function() {
+      // Dispatch custom event for testing long press
       link.dispatchEvent(contextMenuEvent);
-      // Are 'click' and 'contextmenu' working properly?
-      assert.ok(LinkActionHandler.onClick.called);
-      assert.ok(LinkActionHandler.onContextMenu.called);
+      assert.isFalse(LinkActionHandler.onClick.calledOnce);
+    });
+    test(' "long-press" on link-action shows the option menu from the bubble',
+      function() {
+      // Dispatch custom event for testing long press
+      link.dispatchEvent(contextMenuEvent);
+      // It should show the list of options of the bubble (forward, delete...)
+      assert.ok(MockOptionMenu.calls.length, 1);
+    });
+    test(' "long-press" on bubble shows a menu with delete as first option',
+      function() {
+      // Dispatch custom event for testing long press
+      link.dispatchEvent(contextMenuEvent);
+      assert.ok(MockOptionMenu.calls.length, 1);
+      // Is first element of the menu 'delete'?
+      assert.equal(MockOptionMenu.calls[0].items[0].l10nId, 'delete');
     });
   });
 
@@ -2635,6 +2681,8 @@ suite('thread_ui.js >', function() {
       suite('prompt', function() {
         test('Single known', function() {
 
+          var contact = new MockContact();
+
           Threads.set(1, {
             participants: ['999']
           });
@@ -2643,12 +2691,32 @@ suite('thread_ui.js >', function() {
 
           ThreadUI.prompt({
             number: '999',
+            contactId: contact.id,
             isContact: true
           });
 
-          assert.equal(MockOptionMenu.calls.length, 0);
-          assert.ok(MockActivityPicker.dial.called);
-          assert.equal(MockActivityPicker.dial.calledWith, '999');
+          assert.equal(MockOptionMenu.calls.length, 1);
+
+          var call = MockOptionMenu.calls[0];
+          var items = call.items;
+
+          // Ensures that the OptionMenu was given
+          // the phone number to diplay
+          assert.equal(call.header, '999');
+
+          // Only known Contact details should appear in the "section"
+          assert.equal(call.section, '');
+
+          assert.equal(items.length, 3);
+
+          // The first item is a "call" option
+          assert.equal(items[0].l10nId, 'call');
+
+          // The second item is a "viewContact" option
+          assert.equal(items[1].l10nId, 'viewContact');
+
+          // The fourth and last item is a "cancel" option
+          assert.equal(items[2].l10nId, 'cancel');
         });
 
         test('Single unknown (phone)', function() {
@@ -2820,11 +2888,12 @@ suite('thread_ui.js >', function() {
 
           ThreadUI.onHeaderActivation();
 
-          // Does not initiate an OptionMenu
-          assert.equal(MockOptionMenu.calls.length, 0);
+          var calls = MockOptionMenu.calls;
 
-          // Does initiate a "call" activity
-          assert.equal(MockActivityPicker.dial.called, 1);
+          assert.equal(calls.length, 1);
+          assert.equal(calls[0].header, '+12125559999');
+          assert.equal(calls[0].items.length, 3);
+          assert.equal(typeof calls[0].complete, 'function');
         });
 
         test('Single unknown', function() {
@@ -3330,34 +3399,6 @@ suite('thread_ui.js >', function() {
     });
   });
 
-  suite('enableActivityRequestMode', function() {
-    test('calling function change the back button icon', function() {
-      var backButtonSpan = ThreadUI.backButton.querySelector('span');
-
-      ThreadUI.enableActivityRequestMode();
-      assert.isTrue(backButtonSpan.classList.contains('icon-close'));
-      assert.isFalse(backButtonSpan.classList.contains('icon-back'));
-    });
-  });
-
-  suite('back action', function() {
-    setup(function() {
-      this.sinon.stub(ThreadUI, 'isKeyboardDisplayed').returns(false);
-      this.sinon.stub(ThreadUI, 'stopRendering');
-    });
-
-    test('call postResult when there is an activity', function() {
-      var mockActivity = {
-        postResult: sinon.stub()
-      };
-
-      ActivityHandler.currentActivity.new = mockActivity;
-
-      ThreadUI.back();
-      assert.isTrue(mockActivity.postResult.called);
-    });
-  });
-
   suite('New Message banner', function() {
     var notice;
     var testMessage;
@@ -3429,4 +3470,5 @@ suite('thread_ui.js >', function() {
       });
     });
   });
+
 });
